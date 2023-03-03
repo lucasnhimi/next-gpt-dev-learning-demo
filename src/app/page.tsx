@@ -1,91 +1,155 @@
-import Image from 'next/image'
-import { Inter } from 'next/font/google'
-import styles from './page.module.css'
-
-const inter = Inter({ subsets: ['latin'] })
+'use client';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export default function Home() {
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [loading, setLoading] = useState(false);
+  const [framework, setFramework] = useState('Next.js');
+  const [searchResponse, setSearchResponse] = useState<string>('');
+  const [endStream, setEndStream] = useState(false);
+  const [recommendations, setRecommendations] = useState<any>([]);
+
+  const updateRecommendations = useCallback(() => {
+    const x = searchResponse?.split('\n');
+    // @ts-ignore
+    const newRecommendations = x?.map((d, i) => {
+      // @ts-ignore
+      if ((x?.length ?? (0 - 1 > i || endStream)) && d !== '') {
+        const match = d.match(/\d\.\s*(.*?):\s*(.*)/);
+        if (match) {
+          const [, title, description] = match;
+          return { title, description };
+        }
+      }
+      return d;
+    });
+
+    if (Array.isArray(newRecommendations)) {
+      const formated = newRecommendations.map((recommendation) =>
+        typeof recommendation === 'string'
+          ? recommendation
+          : // @ts-ignore
+            `${recommendation.title}: ${recommendation.description}`
+      );
+
+      setRecommendations(formated);
+    }
+  }, [endStream, searchResponse]);
+
+  useEffect(() => {
+    updateRecommendations();
+  }, [updateRecommendations]);
+
+  const handleClick = async (e: any) => {
+    e.preventDefault();
+    if (loading) return;
+    if (!inputRef) return;
+
+    setLoading(true);
+    setSearchResponse('');
+    setEndStream(false);
+
+    const fullSearchCriteria = `Me dê uma lista de 5 projetos para desenvolver com o framework ${framework}.  
+    ${
+      inputRef.current?.value
+        ? `Atendendo a seguinte descrição: ${inputRef.current?.value}`
+        : ''
+    }`;
+
+    console.log('fullSearchCriteria', fullSearchCriteria);
+
+    const response = await fetch('/api/openai', {
+      method: 'POST',
+      body: JSON.stringify({ searched: fullSearchCriteria }),
+      headers: {
+        'content-type': 'application/json',
+      },
+    });
+
+    if (response.ok) {
+      try {
+        const data = response.body;
+        if (!data) {
+          return;
+        }
+        const reader = data.getReader();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { value, done } = await reader.read();
+          const chunkValue = decoder.decode(value);
+          setSearchResponse((prev) => prev + chunkValue);
+          if (done) {
+            setEndStream(true);
+            break;
+          }
+        }
+      } catch (err) {
+        //error = 'Looks like OpenAI timed out :(';
+      }
+    } else {
+      //error = await response.text();
+    }
+    setLoading(false);
+  };
+
+  console.log('recommendations', recommendations);
+  console.log('searchResponse', searchResponse);
+
   return (
-    <main className={styles.main}>
-      <div className={styles.description}>
-        <p>
-          Get started by editing&nbsp;
-          <code className={styles.code}>src/app/page.tsx</code>
-        </p>
+    <div className='mt-6'>
+      <div className='font-extrabold text-black text-3xl md:text-5xl mb-10'>
+        5 dicas de projetos para desenvolver com frameworks JavaScript usando a
+        Open AI
+      </div>
+      <div className='mb-8'>
+        <div className='mb-4 font-semibold'>
+          Seleciona abaixo qual framework você quer utilizar.
+        </div>
         <div>
-          <a
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          <select
+            className='p-2 rounded-md border text-gray-600 w-full text-sm'
+            value={framework}
+            onChange={(e) => setFramework(e.currentTarget.value)}
           >
-            By{' '}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className={styles.vercelLogo}
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
+            <option value='Next.js'> Next.js </option>
+            <option value='Svelt'> Svelt </option>
+            <option value='Vue.js'> Vue.js </option>
+            <option value='Angular.js'> Angular.js </option>
+          </select>
         </div>
       </div>
-
-      <div className={styles.center}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
+      <div className='my-8'>
+        <div className='mb-4 font-semibold'>
+          Coloque aqui alguma informação adicional. (optional)
+        </div>
+        <textarea
+          ref={inputRef}
+          className='p-2 rounded-md border text-gray-600 w-full h-20 text-sm'
+          placeholder='Ex. Projetos utilizando tailwind css.'
         />
-        <div className={styles.thirteen}>
-          <Image src="/thirteen.svg" alt="13" width={40} height={31} priority />
-        </div>
+        <button
+          onClick={handleClick}
+          className={`bg-indigo-500 hover:bg-gradient-to-r from-indigo-700 via-indigo-500 to-indigo-700mt-4 w-full h-10 text-white font-bold p-3 rounded flex items-center justify-center`}
+        >
+          <p>Exibir dicas</p>
+        </button>
       </div>
-
-      <div className={styles.grid}>
-        <a
-          href="https://beta.nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={inter.className}>
-            Docs <span>-&gt;</span>
-          </h2>
-          <p className={inter.className}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={inter.className}>
-            Templates <span>-&gt;</span>
-          </h2>
-          <p className={inter.className}>Explore the Next.js 13 playground.</p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className={styles.card}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={inter.className}>
-            Deploy <span>-&gt;</span>
-          </h2>
-          <p className={inter.className}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
-  )
+      {recommendations &&
+        recommendations.length > 0 &&
+        recommendations.map((recommendation, i) => (
+          <div className='mb-4 rounded-lg shadow bg-white p-4' key={i}>
+            {typeof recommendation !== 'string' ? (
+              <div>
+                <div className='text-2xl font-bold mb-2'>
+                  {recommendation.title}
+                </div>
+                <div>{recommendation.description}</div>
+              </div>
+            ) : (
+              <div>{recommendation}</div>
+            )}
+          </div>
+        ))}
+    </div>
+  );
 }
